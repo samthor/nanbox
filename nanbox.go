@@ -1,7 +1,7 @@
 package nanbox
 
 import (
-	"log"
+	"encoding/binary"
 	"math"
 )
 
@@ -69,19 +69,15 @@ func PackBytes(b []byte) (f []float64) {
 			control = here + 0b1000 // 1-6 "last"
 		}
 
-		// place in reverse (low on left)
+		// go forwards so packing retains byte order
 		var value uint64
-		for j := here - 1; j >= 0; j-- {
+		for j := 0; j < here; j++ {
 			value <<= 8
 			value += uint64(b[i+j])
 		}
 
 		value += uint64(control) << 48
 		value += 0b1_11111111111 << 52
-
-		// enc += value
-
-		log.Printf("got enc value=%+v (nan=%v) for slice=%+v", value, math.IsNaN(math.Float64frombits(value)), b[i:i+here])
 
 		f = append(f, math.Float64frombits(value))
 	}
@@ -98,27 +94,23 @@ func UnpackBytes(f []float64) (consumed int, b []byte) {
 		}
 
 		raw := math.Float64bits(each)
-		control := raw & (0xf000000000000) >> 48 // this is the 13-16 bits set to true (control)
+		var tmp [8]byte
+		binary.BigEndian.PutUint64(tmp[:], raw)
+		control := tmp[1] & 0b00001111 // bits 13-16
 
-		count := 6
-		var done bool
-
-		if control != 15 {
-			count = int(control & 0b0111)
-			if count > 6 || count == 0 || (control&0b1000) == 0 {
-				break
-			}
-			done = true
+		// all data case
+		if control == 15 {
+			b = append(b, tmp[2:]...)
+			continue
 		}
 
-		for i := 0; i < count; i++ {
-			next := byte(raw & 0xff)
-			b = append(b, next)
-			raw >>= 8
+		// tail case
+		count := int(control & 0b0111)
+		if count > 6 || count == 0 || (control&0b1000) == 0 {
+			break
 		}
-		if done {
-			return i + 1, b
-		}
+		b = append(b, tmp[8-count:]...)
+		return i + 1, b
 	}
 
 	return 0, nil
