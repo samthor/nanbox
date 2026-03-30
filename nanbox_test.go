@@ -102,7 +102,6 @@ func TestPackBytes(t *testing.T) {
 }
 
 func TestUnpackBytes(t *testing.T) {
-
 	errorCases := []float64{
 		math.NaN(),
 		math.Inf(1),
@@ -116,5 +115,76 @@ func TestUnpackBytes(t *testing.T) {
 			t.Errorf("expected nil out for: %+v", c)
 		}
 	}
+}
 
+func TestPackNil(t *testing.T) {
+	packed := PackBytes(nil)
+	if len(packed) != 1 {
+		t.Errorf("must pack one empty float64")
+	}
+
+	consumed, unpacked := UnpackBytes(packed)
+	if consumed != 1 || unpacked != nil {
+		t.Errorf("bad unpacked nil: consumed=%v unpacked=%v", consumed, unpacked)
+	}
+}
+
+func TestPackBytesRun(t *testing.T) {
+	var src [][]byte
+	var packed []float64
+
+	for i := 0; i < 4; i++ {
+		length := rand.Int31n(128)
+		data := make([]byte, length)
+		for j := 0; j < int(length); j++ {
+			data[j] = byte(rand.Intn(256))
+		}
+
+		src = append(src, data)
+
+		p := PackBytes(data)
+		packed = append(packed, p...)
+	}
+
+	j := 0
+	var out [][]byte
+	for j < len(packed) {
+		consumed, unpacked := UnpackBytes(packed[j:])
+		if consumed == 0 {
+			t.Fatalf("could not consume more bytes")
+		}
+		out = append(out, unpacked)
+		j += consumed
+	}
+
+	if !reflect.DeepEqual(src, out) {
+		t.Errorf("could not enc/dec many bytes: src=%+v out=%+v", src, out)
+	}
+}
+
+func TestNaNMap(t *testing.T) {
+	// this test is entirely unrelated but I wanted to verify Go behavior
+	m := map[float64]int{}
+
+	for i := 0; i < 1000; i++ {
+		m[math.NaN()] = i
+	}
+	if len(m) != 1000 {
+		t.Errorf("every same NaN must create new entry")
+	}
+
+	packedNan := PackInt32(3)
+	m[packedNan] = 9999
+	if len(m) != 1001 {
+		t.Errorf("should create anew")
+	}
+
+	_, ok := m[packedNan]
+	if ok {
+		t.Errorf("packed NaN must not be special")
+	}
+
+	if UnpackInt32(packedNan) != 3 {
+		t.Errorf("wasn't packed properly")
+	}
 }
