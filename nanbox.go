@@ -16,18 +16,10 @@ import (
 )
 
 const (
-	pack32base = 0b1_11111111111_0111 << 48
-	pack51base = 0b1_11111111111_1 << 51
+	pack32base uint64 = 0b1_11111111111_0111 << 48
+	pack51base uint64 = 0b1_11111111111_1 << 51
+	pack51mask        = ^pack51base
 )
-
-var (
-	pack51mask uint64
-)
-
-func init() {
-	pack51mask = pack51base
-	pack51mask = ^pack51mask
-}
 
 // PackInt32 packs any int32 into a float64 NaN.
 // It places its bits on the right side, while encoding an extra unused sentinel on the left.
